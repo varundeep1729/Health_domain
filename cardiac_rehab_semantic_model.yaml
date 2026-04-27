@@ -1,0 +1,189 @@
+name: cardiac_rehab_semantic_model
+description: >
+  Semantic model for cardiac rehabilitation analytics.
+  Covers patient demographics, rehab sessions, outcomes, and quality measures.
+  Grounded in AACVPR guidelines and PyHealth clinical prediction tasks.
+
+tables:
+  - name: DIM_PATIENT
+    base_table:
+      database: HEALTH_TRANSFORM_DB
+      schema: PATIENTS
+      table: DIM_PATIENT
+    description: Conformed patient demographics
+    dimensions:
+      - name: PATIENT_ID
+        expr: PATIENT_ID
+        description: Unique patient identifier
+        data_type: VARCHAR
+      - name: GENDER
+        expr: GENDER
+        description: Patient gender
+        data_type: VARCHAR
+      - name: ETHNICITY
+        expr: ETHNICITY
+        description: Patient ethnicity
+        data_type: VARCHAR
+      - name: AGE_GROUP
+        expr: >
+          CASE
+            WHEN AGE < 45 THEN '<45'
+            WHEN AGE < 55 THEN '45-54'
+            WHEN AGE < 65 THEN '55-64'
+            WHEN AGE < 75 THEN '65-74'
+            ELSE '75+'
+          END
+        description: Age group bucket
+        data_type: VARCHAR
+    measures:
+      - name: PATIENT_COUNT
+        expr: COUNT(DISTINCT PATIENT_ID)
+        description: Number of distinct patients
+      - name: AVERAGE_AGE
+        expr: AVG(AGE)
+        description: Average patient age
+
+  - name: FACT_REHAB_SESSION
+    base_table:
+      database: HEALTH_TRANSFORM_DB
+      schema: CARDIAC_REHAB
+      table: FACT_REHAB_SESSION
+    description: Individual cardiac rehab exercise sessions with hemodynamic data
+    dimensions:
+      - name: SESSION_ID
+        expr: SESSION_ID
+        data_type: VARCHAR
+      - name: MODALITY
+        expr: MODALITY
+        description: Exercise modality (treadmill, cycle, etc.)
+        data_type: VARCHAR
+      - name: SAFETY_FLAG
+        expr: SAFETY_FLAG
+        description: Whether session had a safety concern
+        data_type: BOOLEAN
+      - name: THERAPIST
+        expr: THERAPIST
+        data_type: VARCHAR
+    time_dimensions:
+      - name: SESSION_DATE
+        expr: SESSION_DATE
+        description: Date of the rehab session
+        data_type: DATE
+    measures:
+      - name: TOTAL_SESSIONS
+        expr: COUNT(*)
+        description: Total number of sessions
+      - name: AVG_PEAK_HR
+        expr: AVG(PEAK_HR)
+        description: Average peak heart rate across sessions
+      - name: AVG_RPE
+        expr: AVG(RPE_PEAK)
+        description: Average RPE at peak exercise
+      - name: AVG_DURATION
+        expr: AVG(DURATION_MINUTES)
+        description: Average session duration in minutes
+      - name: SAFETY_INCIDENT_COUNT
+        expr: SUM(CASE WHEN SAFETY_FLAG THEN 1 ELSE 0 END)
+        description: Number of sessions with safety incidents
+      - name: EARLY_TERMINATION_COUNT
+        expr: SUM(CASE WHEN EXERCISE_TERMINATED_EARLY THEN 1 ELSE 0 END)
+        description: Sessions terminated early
+      - name: TOTAL_ECG_MINUTES
+        expr: SUM(ECG_MONITOR_MINUTES)
+        description: Total ECG telemetry monitoring minutes
+      - name: AVG_HRR_PERCENT
+        expr: AVG(ACHIEVED_HRR_PERCENT)
+        description: Average achieved heart rate reserve percentage (Karvonen)
+
+  - name: FACT_REHAB_REFERRAL
+    base_table:
+      database: HEALTH_TRANSFORM_DB
+      schema: CARDIAC_REHAB
+      table: FACT_REHAB_REFERRAL
+    description: Cardiac rehab referrals with risk stratification
+    dimensions:
+      - name: REFERRAL_ID
+        expr: REFERRAL_ID
+        data_type: VARCHAR
+      - name: QUALIFYING_DIAGNOSIS
+        expr: QUALIFYING_DIAGNOSIS
+        description: Qualifying cardiac diagnosis
+        data_type: VARCHAR
+      - name: RISK_CATEGORY
+        expr: COMPUTED_RISK
+        description: AACVPR risk category (LOW, MODERATE, HIGH)
+        data_type: VARCHAR
+    time_dimensions:
+      - name: REFERRAL_DATE
+        expr: REFERRAL_DATE
+        data_type: DATE
+    measures:
+      - name: REFERRAL_COUNT
+        expr: COUNT(DISTINCT REFERRAL_ID)
+        description: Number of referrals
+      - name: AVG_LVEF
+        expr: AVG(LVEF_PERCENT)
+        description: Average left ventricular ejection fraction
+      - name: AVG_DAYS_TO_REFERRAL
+        expr: AVG(DAYS_EVENT_TO_REFERRAL)
+        description: Average days from cardiac event to referral
+
+  - name: FACT_REHAB_OUTCOME
+    base_table:
+      database: HEALTH_TRANSFORM_DB
+      schema: CARDIAC_REHAB
+      table: FACT_REHAB_OUTCOME
+    description: Rehab outcome measurements (6MWT, DASI, PHQ-9, vitals)
+    dimensions:
+      - name: MEASUREMENT_POINT
+        expr: MEASUREMENT_POINT
+        description: Baseline, mid-program, or discharge
+        data_type: VARCHAR
+      - name: DEPRESSION_SEVERITY
+        expr: DEPRESSION_SEVERITY
+        data_type: VARCHAR
+    time_dimensions:
+      - name: MEASUREMENT_DATE
+        expr: MEASUREMENT_DATE
+        data_type: DATE
+    measures:
+      - name: AVG_6MWT
+        expr: AVG(SIX_MIN_WALK_METERS)
+        description: Average six-minute walk test distance in meters
+      - name: AVG_PEAK_METS
+        expr: AVG(PEAK_METS)
+        description: Average peak MET capacity
+      - name: AVG_PHQ9
+        expr: AVG(PHQ9_SCORE)
+        description: Average PHQ-9 depression score
+      - name: AVG_BMI
+        expr: AVG(BMI)
+        description: Average BMI
+
+relationships:
+  - name: patient_to_referral
+    left_table: DIM_PATIENT
+    right_table: FACT_REHAB_REFERRAL
+    join_type: left
+    relationship_type: one_to_many
+    on:
+      - left_column: PATIENT_ID
+        right_column: PATIENT_ID
+
+  - name: referral_to_session
+    left_table: FACT_REHAB_REFERRAL
+    right_table: FACT_REHAB_SESSION
+    join_type: left
+    relationship_type: one_to_many
+    on:
+      - left_column: REFERRAL_ID
+        right_column: REFERRAL_ID
+
+  - name: referral_to_outcome
+    left_table: FACT_REHAB_REFERRAL
+    right_table: FACT_REHAB_OUTCOME
+    join_type: left
+    relationship_type: one_to_many
+    on:
+      - left_column: REFERRAL_ID
+        right_column: REFERRAL_ID
