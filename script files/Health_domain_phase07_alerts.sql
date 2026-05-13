@@ -27,7 +27,7 @@
 -- Dependencies:
 --   - Phase 05/06 monitoring views exist
 --   - HEALTH_ANALYTICS_WH exists
--- ============================================================
+-- ===========================================================
 
 USE ROLE ACCOUNTADMIN;
 USE DATABASE HEALTH_GOVERNANCE_DB;
