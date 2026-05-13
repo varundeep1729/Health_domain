@@ -31,6 +31,8 @@
 
 USE ROLE SYSADMIN;
 USE WAREHOUSE HEALTH_TRANSFORM_WH;
+USE DATABASE HEALTH_TRANSFORM_DB;
+USE SCHEMA CLEANSED;
 
 -- ============================================================
 -- LOOKUP TABLES
@@ -376,28 +378,39 @@ INSERT INTO HEALTH_TRANSFORM_DB.CLEANSED.FACT_LAB_RESULT (
     lab_id, encounter_id, patient_id, loinc_code, test_name, result_value, result_numeric,
     unit, reference_low, reference_high, abnormal_flag, computed_flag, collected_at
 )
+WITH lab_base AS (
+    SELECT
+        SEQ4() AS row_id,
+        lt.loinc_code,
+        lt.test_name,
+        lt.unit,
+        lt.ref_low,
+        lt.ref_high,
+        ROUND(lt.ref_low * 0.5 + (lt.ref_high * 1.8 - lt.ref_low * 0.5) * ABS(MOD(HASH(SEQ4() || lt.loinc_code), 10000)) / 10000.0, 2) AS result_val
+    FROM TABLE(GENERATOR(ROWCOUNT => 10000)) g,
+         (SELECT loinc_code, test_name, unit, ref_low, ref_high, ROW_NUMBER() OVER (ORDER BY loinc_code) AS rn FROM TEMP_LAB_TESTS) lt
+    WHERE lt.rn = MOD(SEQ4(), 30) + 1
+    LIMIT 10000
+)
 SELECT
-    'LAB-' || LPAD(SEQ4(), 8, '0'),
-    'ENC-' || LPAD(MOD(SEQ4(), 15000), 8, '0'),
-    'PAT-' || LPAD(MOD(SEQ4(), 5000), 6, '0'),
-    lt.loinc_code,
-    lt.test_name,
-    ROUND(UNIFORM(lt.ref_low * 0.5, lt.ref_high * 1.8, RANDOM()), 2)::VARCHAR,
-    ROUND(UNIFORM(lt.ref_low * 0.5, lt.ref_high * 1.8, RANDOM()), 2),
-    lt.unit,
-    lt.ref_low,
-    lt.ref_high,
+    'LAB-' || LPAD(row_id, 8, '0'),
+    'ENC-' || LPAD(MOD(row_id, 15000), 8, '0'),
+    'PAT-' || LPAD(MOD(row_id, 5000), 6, '0'),
+    loinc_code,
+    test_name,
+    result_val::VARCHAR,
+    result_val,
+    unit,
+    ref_low,
+    ref_high,
     NULL,
     CASE
-        WHEN UNIFORM(lt.ref_low * 0.5, lt.ref_high * 1.8, RANDOM()) < lt.ref_low THEN 'LOW'
-        WHEN UNIFORM(lt.ref_low * 0.5, lt.ref_high * 1.8, RANDOM()) > lt.ref_high THEN 'HIGH'
+        WHEN result_val < ref_low THEN 'LOW'
+        WHEN result_val > ref_high THEN 'HIGH'
         ELSE 'NORMAL'
     END,
-    DATEADD(MINUTE, -UNIFORM(1, 1500000, RANDOM()), CURRENT_TIMESTAMP())
-FROM TABLE(GENERATOR(ROWCOUNT => 10000)) g,
-     (SELECT loinc_code, test_name, unit, ref_low, ref_high, ROW_NUMBER() OVER (ORDER BY loinc_code) AS rn FROM TEMP_LAB_TESTS) lt
-WHERE lt.rn = MOD(SEQ4(), 30) + 1
-LIMIT 10000;
+    DATEADD(MINUTE, -ABS(MOD(HASH(row_id), 1500000)), CURRENT_TIMESTAMP())
+FROM lab_base;
 
 
 -- ============================================================
