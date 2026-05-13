@@ -474,7 +474,6 @@ SELECT
     CREATED_ON                                              AS CREATED_ON,
     LAST_SUCCESS_LOGIN                                      AS LAST_LOGIN,
     DISABLED                                                AS IS_DISABLED,
-    LOCKED                                                  AS IS_LOCKED,
     HAS_MFA                                                 AS HAS_MFA,
     DATEDIFF(DAY, LAST_SUCCESS_LOGIN, CURRENT_TIMESTAMP())  AS DAYS_SINCE_LAST_LOGIN,
     CASE
