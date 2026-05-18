@@ -7,3 +7,9 @@ entities:
       - pyproject.toml
       - streamlit_app.py
       - .streamlit/config.toml
+      - app_pages/executive_summary.py
+      - app_pages/clinical_analytics.py
+      - app_pages/population_health.py
+      - app_pages/quality_measures.py
+      - app_pages/financial.py
+      - app_pages/ai_assistant.py
